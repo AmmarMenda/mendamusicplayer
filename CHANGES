@@ -1,0 +1,63 @@
+# Summary of Changes to Menda Music Player
+
+This document outlines the major modifications, optimizations, and features added to the project.
+
+## 📁 Modified Files
+- `app/src/main/java/com/ammar/mendamusicplayer/MainActivity.kt`
+- `app/src/main/java/com/ammar/mendamusicplayer/MusicService.kt`
+- `app/src/main/res/layout/activity_main.xml`
+- `app/build.gradle.kts`
+- `app/src/main/res/drawable/` (Added multiple vector drawables and background styles)
+- `local.properties` (Added for SDK configuration)
+
+---
+
+## 🛠️ Logic & Function Changes
+
+### MainActivity.kt
+- **Added Functions:**
+    - `updateAlbumArt(song: Song)`: Extracts embedded album art from MP3/FLAC using `MediaMetadataRetriever` on a background thread.
+    - `calculateInSampleSize(...)`: Utility to downsample large images to prevent `OutOfMemory` errors.
+    - `updateNotification(songName, isPlaying, songUri)`: Manages the foreground service state. Optimized to pass URIs instead of Bitmaps to avoid binder crashes.
+    - `loadSavedFolder()`: Reads the last selected directory from `SharedPreferences`.
+    - `updatePlaybackState(state)`: Updates `MediaSessionCompat` with the current player state.
+    - `togglePlaylistView()`: Handles UI transition between the main library and the "Up Next" view.
+    - `updatePlaylistUI()`: Generates the dynamic dual-pane playlist view (Album Art + List).
+    - `scanDocumentTree(directory)`: Now uses `lifecycleScope` (Launch Dispatchers.IO) to scan files without freezing the UI.
+- **Modified Functions:**
+    - `onCreate()`: Now initializes `MediaSessionCompat` for earphone controls and checks for saved folders.
+    - `onActivityResult()`: Now saves the selected folder URI to `SharedPreferences` persistently.
+    - `playAudio(index)`: Integrated with album art updates and notification refreshes.
+    - `setupControls()`: Added `btnFolder` and `MediaSession` callback logic.
+    - `onDestroy()`: Added cleanup for `mediaSession` and safe `musicReceiver` unregistration.
+
+### MusicService.kt
+- **Added Functions:**
+    - `loadAlbumArt(uriStr)`: Background loader for notification icons using `MediaMetadataRetriever`.
+- **Modified Logic:**
+    - Updated `onStartCommand` to use `CoroutineScope` for background image loading.
+    - Implemented `androidx.media.app.NotificationCompat.MediaStyle` for a professional media player notification.
+    - Added `setContentIntent` to allow the notification to open the app on click.
+
+---
+
+## ✨ Design & Aesthetic Changes (macOS Brushed Metal)
+- **Backgrounds:** Created `bg_brushed_metal.xml` and `bg_metal_button.xml` using purely XML gradients and layer-lists to achieve a 2000s-era macOS look with zero memory footprint (avoids large PNG textures).
+- **Icons:** Replaced all raster images (PNGs) with lightweight Vector Drawables (`ic_play_vec.xml`, `ic_pause_vec.xml`, `ic_folder_vec.xml`, etc.).
+- **Playlist UI:** Implemented a dual-pane "Up Next" view that displays a large album art placeholder (`imgAlbumArt`) alongside the queue.
+
+---
+
+## ⚡ Critical Memory & Performance Optimizations
+1. **Bitmap Downsampling:** All album art is decoded to a maximum of 400x400 pixels. This prevents `OutOfMemory` crashes when loading high-resolution embedded art.
+2. **Explicit Recycling:** Added `Bitmap.recycle()` calls to ensure old image memory is freed immediately when skipping tracks.
+3. **Intent Safety**: Refactored the notification system to pass **URIs** instead of **Bitmaps** via Intents. This fixes the common Android binder crash (`Could not copy bitmap to parcel blob`).
+4. **Background Scanning**: File system scanning is moved to `Dispatchers.IO` via Kotlin Coroutines to prevent "Application Not Responding" (ANR) dialogs.
+
+---
+
+## 🚀 Important for Future Modifications
+- **Project SDK**: Ensure `local.properties` specifies `sdk.dir=/opt/android-sdk` if building on the same Linux environment.
+- **MediaSession**: The app uses `MediaSessionCompat`. Hardware earphone clicks (Single: play/pause, Double: next, Triple: prev) are handled automatically by Android and routed through the `callback` in `MainActivity.setupControls`.
+- **Permissions**: If adding new file types, update the extension check in `recursiveScan`.
+- **Dependencies**: Added `kotlinx-coroutines-android` and `lifecycle-runtime-ktx` to `build.gradle.kts` for modern concurrency support.

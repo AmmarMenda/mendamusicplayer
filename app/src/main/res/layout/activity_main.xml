@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_brushed_metal"
+>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp">
+
+        <ImageButton
+            android:id="@+id/btnFolder"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_folder_vec" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:gravity="center"
+            android:text="Menda Player"
+            android:textColor="#333333"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:shadowColor="#FFFFFF"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="1.0" />
+    </RelativeLayout>
+
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+    >
+
+        <LinearLayout
+            android:id="@+id/viewAllMusic"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+        >
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="16dp"
+                android:text="Pick a folder to scan..."
+            />
+
+            <ListView
+                android:id="@+id/musicList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+            />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/viewPlaylist"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:background="@drawable/bg_brushed_metal"
+        > 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:text="Up Next"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:textSize="18sp"
+                android:shadowColor="#FFFFFF"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="1.0"
+            />
+
+            <ImageView
+                android:id="@+id/imgAlbumArt"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_album_placeholder_vec"
+                android:padding="16dp"
+            />
+
+            <ListView
+                android:id="@+id/playlistList"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:divider="#40000000"
+                android:dividerHeight="1dp"
+            />
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="#10000000"
+    >
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+        >
+
+            <TextView
+                android:id="@+id/nowPlayingText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Not Playing"
+                android:textStyle="bold"
+            />
+
+            <Button
+                android:id="@+id/btnTogglePlaylist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▲"
+                android:textSize="18sp"
+                android:textColor="#3333"
+                android:background="@drawable/bg_metal_button"
+            />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+        />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+        >
+
+        <ImageButton
+                android:id="@+id/btnShuffle"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_shuffle_vec"
+                android:scaleType="fitCenter"
+                android:padding="10dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:layout_marginEnd="16dp"
+            />
+
+            <ImageButton
+                android:id="@+id/btnPrev"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_prev_vec"
+                android:scaleType="fitCenter"
+                android:padding="16dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+            />
+
+            <ImageButton
+                android:id="@+id/btnPlayPause"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_pause_vec"
+                android:scaleType="fitCenter"
+                android:padding="12dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+            />
+
+            <ImageButton
+                android:id="@+id/btnNext"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_next_vec"
+                android:scaleType="fitCenter"
+                android:padding="16dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+            />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
