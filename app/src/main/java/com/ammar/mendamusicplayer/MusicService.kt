@@ -46,6 +46,7 @@ class MusicService : Service() {
             .setContentTitle("Menda Player")
             .setContentText(songName)
             .setSmallIcon(R.drawable.ic_play_vec)
+            .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.primary))
             .setContentIntent(pOpenApp)
             .setOngoing(isPlaying)
             .addAction(R.drawable.ic_prev_vec, "Prev", pPrev)

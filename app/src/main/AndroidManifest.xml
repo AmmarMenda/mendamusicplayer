@@ -10,6 +10,7 @@
 <application
         android:label="Menda Player"
         android:theme="@style/Theme.MendaMusicPlayer"
+        android:icon="@mipmap/ic_launcher"
     >
     <service
             android:name=".MusicService"
@@ -19,6 +20,7 @@
     <activity
             android:name="com.ammar.mendamusicplayer.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
         >
             <intent-filter>

@@ -44,16 +44,26 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.Menu
+import android.view.MenuItem
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 
 class MainActivity : AppCompatActivity() {
 
-    private var currentSongIndex = -1
+    companion object {
+        var currentSongIndex = -1
+        var mediaPlayer: MediaPlayer? = null
+        var isShuffleEnabled = false
+        var shuffledIndices = mutableListOf<Int>()
+        val songList = mutableListOf<Song>()
+    }
+
+    private var displayedSongList = mutableListOf<Song>()
+
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var updateSeekBar: Runnable
-    private var mediaPlayer: MediaPlayer? = null
     private var isPlaylistVisible = false
-    private var isShuffleEnabled = false
-    private var shuffledIndices = mutableListOf<Int>()
     private var currentAlbumArt: Bitmap? = null
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -74,6 +84,23 @@ class MainActivity : AppCompatActivity() {
             ).show()
         }
     }
+
+override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+    // This takes your XML file and draws it onto the top bar
+    menuInflater.inflate(R.menu.main_menu, menu)
+    return true
+}
+
+override fun onOptionsItemSelected(item: MenuItem): Boolean {
+    return when (item.itemId) {
+        R.id.action_search -> {
+            // Using the fully qualified name "android.widget.Toast" fixes the ambiguity
+            android.widget.Toast.makeText(this, "Search button tapped!", android.widget.Toast.LENGTH_SHORT).show()
+            true
+        }
+        else -> super.onOptionsItemSelected(item)
+    }
+}
 
     private fun checkStorageAndLoadMusic() {
         val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -253,7 +280,7 @@ class MainActivity : AppCompatActivity() {
     private fun togglePlaylistView() {
         val viewAllMusic = findViewById<LinearLayout>(R.id.viewAllMusic)
         val viewPlaylist = findViewById<LinearLayout>(R.id.viewPlaylist)
-        val btnToggle = findViewById<Button>(R.id.btnTogglePlaylist)
+        val btnToggle = findViewById<ImageButton>(R.id.btnTogglePlaylist)
 
         isPlaylistVisible = !isPlaylistVisible
 
@@ -261,13 +288,13 @@ class MainActivity : AppCompatActivity() {
             // Show Playlist, Hide Main Library
             viewAllMusic.visibility = View.GONE
             viewPlaylist.visibility = View.VISIBLE
-            btnToggle.text = "▼" // Arrow points down to "hide"
+            btnToggle.animate().rotation(90f).setDuration(200).start() // Arrow points down
             updatePlaylistUI()
         } else {
             // Show Main Library, Hide Playlist
             viewAllMusic.visibility = View.VISIBLE
             viewPlaylist.visibility = View.GONE
-            btnToggle.text = "▲" // Arrow points up to "expand"
+            btnToggle.animate().rotation(-90f).setDuration(200).start() // Arrow points up
         }
     }
 
@@ -458,14 +485,17 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             audioManager.abandonAudioFocus(audioFocusChangeListener)
         }
-        mediaPlayer?.release()
-        mediaPlayer = null
         handler.removeCallbacks(updateSeekBar)
+        unregisterReceiver(musicReceiver)
 
-        unregisterReceiver(musicReceiver) // Add this line
-        stopService(Intent(this, MusicService::class.java))
-        mediaSession.isActive = false
-        mediaSession.release()
+        // Only stop everything if the activity is finishing and the player isn't active
+        if (isFinishing && mediaPlayer?.isPlaying != true) {
+            mediaPlayer?.release()
+            mediaPlayer = null
+            stopService(Intent(this, MusicService::class.java))
+            mediaSession.isActive = false
+            mediaSession.release()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -507,7 +537,76 @@ class MainActivity : AppCompatActivity() {
         })
 
         setContentView(R.layout.activity_main)
+        val defaultTopBar = findViewById<View>(R.id.defaultTopBar)
+        val searchTopBar = findViewById<View>(R.id.searchTopBar)
+        val btnSearchClose = findViewById<ImageButton>(R.id.btnSearchClose)
+        val etSearchInput = findViewById<EditText>(R.id.etSearchInput)
+        val btnSearch = findViewById<ImageButton>(R.id.btnSearch)
+
+        val bottomPlayerBar = findViewById<View>(R.id.bottomPlayerBar)
+        val bottomDivider = findViewById<View>(R.id.bottomDivider)
+
+        // Open Search
+        btnSearch.setOnClickListener {
+            defaultTopBar.visibility = View.GONE
+            searchTopBar.visibility = View.VISIBLE
+            bottomPlayerBar.visibility = View.GONE
+            bottomDivider.visibility = View.GONE
+            
+            // Focus the text input and show the keyboard
+            etSearchInput.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(etSearchInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+
+        // Close Search
+        btnSearchClose.setOnClickListener {
+            searchTopBar.visibility = View.GONE
+            defaultTopBar.visibility = View.VISIBLE
+            bottomPlayerBar.visibility = View.VISIBLE
+            bottomDivider.visibility = View.VISIBLE
+            
+            // Clear the text and hide the keyboard
+            etSearchInput.text.clear()
+            updateUI(songList)
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(etSearchInput.windowToken, 0)
+        }
+
+        etSearchInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s?.toString() ?: ""
+                if (query.isEmpty()) {
+                    updateUI(songList)
+                } else {
+                    val filtered = songList.filter { isFuzzyMatch(query, it.name) }
+                    updateUI(filtered)
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
         setupControls()
+
+        // Sync UI with existing playback state if already playing
+        mediaPlayer?.let { player ->
+            if (player.isPlaying) {
+                val currentSong = if (currentSongIndex >= 0 && currentSongIndex < songList.size) songList[currentSongIndex] else null
+                currentSong?.let {
+                    findViewById<TextView>(R.id.nowPlayingText).text = it.name
+                    updateAlbumArt(it)
+                }
+                findViewById<ImageButton>(R.id.btnPlayPause).setImageResource(R.drawable.ic_pause_vec)
+                findViewById<SeekBar>(R.id.seekBar).max = player.duration
+                handler.post(updateSeekBar)
+            }
+        }
+
+        if (isShuffleEnabled) {
+            findViewById<ImageButton>(R.id.btnShuffle).setColorFilter(ContextCompat.getColor(this, R.color.primary))
+        }
+
         checkPermissions()
     }
 
@@ -518,7 +617,7 @@ class MainActivity : AppCompatActivity() {
         val btnPlayPause = findViewById<ImageButton>(R.id.btnPlayPause)
         val btnNext = findViewById<ImageButton>(R.id.btnNext)
         val seekBar = findViewById<SeekBar>(R.id.seekBar)
-        val btnTogglePlaylist = findViewById<Button>(R.id.btnTogglePlaylist)
+        val btnTogglePlaylist = findViewById<ImageButton>(R.id.btnTogglePlaylist)
         val btnFolder = findViewById<ImageButton>(R.id.btnFolder)
 
         btnFolder.setOnClickListener {
@@ -534,7 +633,7 @@ class MainActivity : AppCompatActivity() {
                 shuffledIndices.remove(currentSongIndex)
                 shuffledIndices.add(0, currentSongIndex)
 
-                btnShuffle.setColorFilter(Color.GREEN) // Highlight icon
+                btnShuffle.setColorFilter(ContextCompat.getColor(this, R.color.primary)) // Highlight icon
             } else {
                 shuffledIndices.clear()
                 btnShuffle.clearColorFilter() // Remove highlight
@@ -596,31 +695,44 @@ class MainActivity : AppCompatActivity() {
 
     private fun openFolderPicker() {
         checkStorageAndLoadMusic()
-    }
-
-
-    // 1. Update the list type
-    private val songList = mutableListOf<Song>()
-
-    private fun refreshLibrary() {
-        // Launch a coroutine on the IO thread to keep the UI smooth
+    }    private fun refreshLibrary() {
         lifecycleScope.launch(Dispatchers.IO) {
-
-            // 1. Fetch the songs using the lightning-fast MediaStore function
             val list = loadSongsFromMediaStore()
-
-            // 2. Switch back to the Main thread to update the UI
             withContext(Dispatchers.Main) {
                 songList.clear()
                 songList.addAll(list)
-
-                // Update your RecyclerView/Playlist UI
+                saveCache(list)
                 updateUI()
-
-                // Update the status text
                 findViewById<TextView>(R.id.statusText).text = "Found ${songList.size} files"
             }
         }
+    }
+
+    private fun saveCache(list: List<Song>) {
+        val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
+        val sb = StringBuilder()
+        for (song in list) {
+            sb.append(song.name).append(":::").append(song.uri.toString()).append("|||")
+        }
+        prefs.edit().putString("cached_songs", sb.toString()).apply()
+    }
+
+    private fun loadCache(): List<Song> {
+        val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
+        val cached = prefs.getString("cached_songs", "") ?: ""
+        if (cached.isEmpty()) return emptyList()
+
+        val list = mutableListOf<Song>()
+        val items = cached.split("|||")
+        for (item in items) {
+            if (item.contains(":::")) {
+                val parts = item.split(":::")
+                if (parts.size >= 2) {
+                    list.add(Song(parts[0], android.net.Uri.parse(parts[1])))
+                }
+            }
+        }
+        return list
     }
 
     private fun playNext() {
@@ -728,14 +840,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateUI() {
+    private fun isFuzzyMatch(query: String, target: String): Boolean {
+        var queryIndex = 0
+        var targetIndex = 0
+        val lowerQuery = query.lowercase()
+        val lowerTarget = target.lowercase()
+        while (queryIndex < lowerQuery.length && targetIndex < lowerTarget.length) {
+            if (lowerQuery[queryIndex] == lowerTarget[targetIndex]) {
+                queryIndex++
+            }
+            targetIndex++
+        }
+        return queryIndex == lowerQuery.length
+    }
+
+    private fun updateUI(listToDisplay: List<Song> = songList) {
+        displayedSongList.clear()
+        displayedSongList.addAll(listToDisplay)
+
         val listView = findViewById<ListView>(R.id.musicList)
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, songList)
+        val adapter = ArrayAdapter(this, R.layout.music_list_item, displayedSongList)
         listView.adapter = adapter
-        findViewById<TextView>(R.id.statusText).text = "Found ${songList.size} files"
+        
+        if (listToDisplay === songList || listToDisplay.size == songList.size) {
+            findViewById<TextView>(R.id.statusText).text = "Found ${songList.size} files"
+        } else {
+            findViewById<TextView>(R.id.statusText).text = "Showing ${displayedSongList.size} of ${songList.size} files"
+        }
 
         listView.setOnItemClickListener { _, _, position, _ ->
-            playAudio(position)
+            val realSong = displayedSongList[position]
+            val realIndex = songList.indexOf(realSong)
+            if(realIndex != -1) {
+                playAudio(realIndex)
+            }
         }
     }
 
@@ -754,32 +892,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadMusic() {
-        val projection = arrayOf(
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media._ID
-        )
-
-        val cursor = contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null, null, MediaStore.Audio.Media.TITLE + " ASC"
-        )
-
-        songList.clear()
-        cursor?.use {
-            val nameColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-            val idColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            while (it.moveToNext()) {
-                val name = it.getString(nameColumn)
-                val id = it.getLong(idColumn)
-                val contentUri = android.content.ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    id
-                )
-                songList.add(Song(name ?: "Unknown", contentUri))
-            }
+        if (songList.isNotEmpty() && mediaPlayer?.isPlaying == true) {
+            updateUI()
+            return
         }
-        updateUI()
+
+        val cached = loadCache()
+        if (cached.isNotEmpty()) {
+            songList.clear()
+            songList.addAll(cached)
+            updateUI()
+            findViewById<TextView>(R.id.statusText).text = "Loaded ${songList.size} from cache"
+        } else {
+            refreshLibrary()
+        }
     }
 
     override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, res: IntArray) {

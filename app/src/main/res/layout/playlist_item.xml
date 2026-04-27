@@ -4,8 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="12dp"
+    android:padding="16dp"
     android:gravity="center_vertical"
+    android:background="@color/background"
 >
 
     <TextView
@@ -13,18 +14,20 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="16sp"
+        android:textSize="15sp"
         android:text="Song Name"
+        android:textColor="@color/onSurface"
+        android:fontFamily="serif"
     />
 
     <Button
         android:id="@+id/btnRemove"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="X"
-        android:backgroundTint="#FF5252"
-        android:textColor="#FFFFFF"
-        android:minWidth="48dp"
-        android:minHeight="48dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="✕"
+        android:textSize="12sp"
+        android:background="?android:attr/selectableItemBackground"
+        android:textColor="@color/error"
+        style="?android:attr/borderlessButtonStyle"
     />
 </LinearLayout>

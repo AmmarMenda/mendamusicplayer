@@ -4,13 +4,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@drawable/bg_brushed_metal"
+    android:background="@color/background"
 >
 
     <RelativeLayout
+        android:id="@+id/defaultTopBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp">
+        android:padding="16dp">
 
         <ImageButton
             android:id="@+id/btnFolder"
@@ -21,23 +22,74 @@
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:padding="12dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_folder_vec" />
+            android:src="@drawable/ic_folder_vec"
+            android:tint="@color/onBackground" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:gravity="center"
-            android:text="Menda Player"
-            android:textColor="#333333"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:shadowColor="#FFFFFF"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="1.0" />
+            android:text="MENDA PLAYER"
+            android:textColor="@color/onBackground"
+            android:textSize="20sp"
+            android:fontFamily="serif"
+            android:letterSpacing="0.05" />
+
+        <ImageButton
+            android:id="@+id/btnSearch"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@android:drawable/ic_menu_search"
+            android:tint="@color/onBackground" />
     </RelativeLayout>
 
+    <RelativeLayout
+        android:id="@+id/searchTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnSearchClose"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_prev_vec" 
+            android:tint="@color/onBackground" />
+
+        <EditText
+            android:id="@+id/etSearchInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_toEndOf="@id/btnSearchClose"
+            android:background="@null"
+            android:hint="Search songs..."
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/onBackground"
+            android:textColorHint="@color/outline"
+            android:textSize="18sp"
+            android:maxLines="1"
+            android:inputType="textNoSuggestions"
+            android:imeOptions="actionSearch" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -58,12 +110,16 @@
                 android:layout_height="wrap_content"
                 android:padding="16dp"
                 android:text="Pick a folder to scan..."
+                android:textColor="@color/onSurface"
+                android:fontFamily="serif"
             />
 
             <ListView
                 android:id="@+id/musicList"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:divider="@color/divider"
+                android:dividerHeight="1dp"
             />
         </LinearLayout>
 
@@ -73,49 +129,55 @@
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:visibility="gone"
-            android:background="@drawable/bg_brushed_metal"
+            android:background="@color/background"
         > 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:padding="12dp"
-                android:text="Up Next"
-                android:textStyle="bold"
-                android:textColor="#333333"
-                android:textSize="18sp"
-                android:shadowColor="#FFFFFF"
-                android:shadowDx="0"
-                android:shadowDy="1"
-                android:shadowRadius="1.0"
+                android:text="UP NEXT"
+                android:textColor="@color/onSurface"
+                android:textSize="14sp"
+                android:fontFamily="serif"
+                android:letterSpacing="0.05"
+                android:background="@color/surfaceContainer"
             />
 
             <ImageView
                 android:id="@+id/imgAlbumArt"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_width="200dp"
+                android:layout_height="200dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_album_placeholder_vec"
-                android:padding="16dp"
-            />
+                android:elevation="4dp" />
 
             <ListView
                 android:id="@+id/playlistList"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:divider="#40000000"
+                android:divider="@color/divider"
                 android:dividerHeight="1dp"
             />
         </LinearLayout>
     </FrameLayout>
 
+    <View
+        android:id="@+id/bottomDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
+
     <LinearLayout
+        android:id="@+id/bottomPlayerBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
-        android:background="#10000000"
+        android:padding="24dp"
+        android:background="@color/surfaceContainer"
     >
 
         <LinearLayout
@@ -131,17 +193,23 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Not Playing"
-                android:textStyle="bold"
+                android:textColor="@color/onSurface"
+                android:fontFamily="monospace"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
             />
 
-            <Button
+            <ImageButton
                 android:id="@+id/btnTogglePlaylist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="▲"
-                android:textSize="18sp"
-                android:textColor="#3333"
-                android:background="@drawable/bg_metal_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_next_vec"
+                android:rotation="-90"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="12dp"
+                android:scaleType="fitCenter"
+                android:tint="@color/onBackground"
             />
         </LinearLayout>
 
@@ -149,8 +217,11 @@
             android:id="@+id/seekBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:progressBackgroundTint="@color/outlineVariant"
+            android:progressTint="@color/primary"
+            android:thumbTint="@color/primary"
         />
 
         <LinearLayout
@@ -160,47 +231,51 @@
             android:gravity="center"
         >
 
-        <ImageButton
+            <ImageButton
                 android:id="@+id/btnShuffle"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_shuffle_vec"
                 android:scaleType="fitCenter"
-                android:padding="10dp"
+                android:padding="12dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:layout_marginEnd="16dp"
+                android:tint="@color/outline"
             />
 
             <ImageButton
                 android:id="@+id/btnPrev"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:src="@drawable/ic_prev_vec"
                 android:scaleType="fitCenter"
-                android:padding="16dp"
+                android:padding="14dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:tint="@color/onBackground"
             />
 
             <ImageButton
                 android:id="@+id/btnPlayPause"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
                 android:src="@drawable/ic_pause_vec"
                 android:scaleType="fitCenter"
-                android:padding="12dp"
+                android:padding="16dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:tint="@color/onBackground"
             />
 
             <ImageButton
                 android:id="@+id/btnNext"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:src="@drawable/ic_next_vec"
                 android:scaleType="fitCenter"
-                android:padding="16dp"
+                android:padding="14dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:tint="@color/onBackground"
             />
         </LinearLayout>
     </LinearLayout>

@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <resources>
-    <style
-        name="Theme.MendaMusicPlayer"
-        parent="Theme.AppCompat.Light.NoActionBar"
-    >
+    <style name="Theme.MendaMusicPlayer" parent="Theme.MaterialComponents.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/onPrimary</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/onBackground</item>
+        <item name="colorOnSecondary">@color/background</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Background color. -->
+        <item name="android:windowBackground">@color/background</item>
+        
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>
