@@ -213,15 +213,12 @@
             />
         </LinearLayout>
 
-        <SeekBar
+        <com.ammar.mendamusicplayer.BloodTubeSeekBar
             android:id="@+id/seekBar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="26dp"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="16dp"
-            android:progressBackgroundTint="@color/outlineVariant"
-            android:progressTint="@color/primary"
-            android:thumbTint="@color/primary"
         />
 
         <LinearLayout
