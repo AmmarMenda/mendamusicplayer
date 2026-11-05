@@ -31,16 +31,24 @@ import android.widget.ListView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import android.app.Activity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.documentfile.provider.DocumentFile
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.content.ContentUris
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -109,18 +117,227 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkStorageAndLoadMusic() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+    private fun saveSelectedFolderUri(uriString: String) {
+        val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("selected_folder_uri", uriString).apply()
+    }
+
+    private suspend fun scanFolderForAudio(folderUri: Uri): List<Song> = withContext(Dispatchers.IO) {
+        val songs = mutableListOf<Song>()
+        val audioExtensions = setOf("mp3", "m4a", "flac", "wav", "ogg", "aac", "opus", "wma", "mka", "mid", "midi")
+
+        fun isAudio(name: String, mime: String?): Boolean {
+            if (mime != null && mime.startsWith("audio/", ignoreCase = true)) return true
+            val ext = name.substringAfterLast('.', "").lowercase()
+            return ext in audioExtensions
         }
 
-        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
-            refreshLibrary()
-        } else {
-            requestStoragePermissionLauncher.launch(permission)
+        // 1. Direct query using DocumentsContract (fast single-cursor traversal without per-file roundtrips)
+        try {
+            if (DocumentsContract.isTreeUri(folderUri)) {
+                val rootDocId = DocumentsContract.getTreeDocumentId(folderUri)
+                val visitedDocs = mutableSetOf<String>()
+
+                fun scanDir(docId: String) {
+                    if (!visitedDocs.add(docId)) return
+                    val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(folderUri, docId)
+                    val projection = arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE
+                    )
+                    contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                        val idIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                        val nameIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                        val mimeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+
+                        while (cursor.moveToNext()) {
+                            val childDocId = (if (idIdx != -1) cursor.getString(idIdx) else null) ?: continue
+                            val displayName = (if (nameIdx != -1) cursor.getString(nameIdx) else null) ?: "Unknown"
+                            val mimeType = (if (mimeIdx != -1) cursor.getString(mimeIdx) else null) ?: ""
+
+                            if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                                scanDir(childDocId)
+                            } else if (isAudio(displayName, mimeType)) {
+                                val childUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, childDocId)
+                                songs.add(Song(displayName, childUri))
+                            }
+                        }
+                    }
+                }
+
+                scanDir(rootDocId)
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Direct DocumentsContract scanning failed", e)
         }
+
+        // 2. Fallback to DocumentFile if direct scan produced no results
+        if (songs.isEmpty()) {
+            try {
+                val rootDoc = if (DocumentsContract.isTreeUri(folderUri)) {
+                    DocumentFile.fromTreeUri(applicationContext, folderUri)
+                } else {
+                    DocumentFile.fromSingleUri(applicationContext, folderUri)
+                }
+
+                fun walkDocumentFile(dir: DocumentFile) {
+                    val files = dir.listFiles()
+                    for (file in files) {
+                        val name = file.name ?: ""
+                        val mime = file.type ?: ""
+                        if (file.isDirectory) {
+                            walkDocumentFile(file)
+                        } else if (isAudio(name, mime)) {
+                            songs.add(Song(name, file.uri))
+                        }
+                    }
+                }
+
+                rootDoc?.let { walkDocumentFile(it) }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "DocumentFile traversal failed", e)
+            }
+        }
+
+        // 3. Fallback to MediaStore if tree URI maps to a storage path and 0 songs were found via SAF
+        if (songs.isEmpty() && DocumentsContract.isTreeUri(folderUri)) {
+            try {
+                val docId = DocumentsContract.getTreeDocumentId(folderUri)
+                val relativeFolder = if (docId.contains(':')) docId.substringAfter(':') else docId
+                if (relativeFolder.isNotEmpty()) {
+                    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                    } else {
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    }
+                    val projection = arrayOf(
+                        MediaStore.Audio.Media._ID,
+                        MediaStore.Audio.Media.TITLE,
+                        MediaStore.Audio.Media.DISPLAY_NAME
+                    )
+                    val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?"
+                    } else {
+                        "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DATA} LIKE ?"
+                    }
+                    val selectionArgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        arrayOf("$relativeFolder%")
+                    } else {
+                        arrayOf("%/$relativeFolder/%")
+                    }
+                    contentResolver.query(collection, projection, selection, selectionArgs, "${MediaStore.Audio.Media.TITLE} ASC")?.use { cursor ->
+                        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                        val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                        val nameCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                        while (cursor.moveToNext()) {
+                            val id = cursor.getLong(idCol)
+                            val name = if (nameCol != -1) cursor.getString(nameCol) else null
+                            val title = cursor.getString(titleCol) ?: name ?: "Unknown"
+                            val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                            songs.add(Song(title, contentUri))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "MediaStore relative path fallback failed", e)
+            }
+        }
+
+        songs.sortBy { it.name.lowercase() }
+        return@withContext songs
+    }
+
+    private fun loadMusicFromSelectedFolder(folderUri: Uri) {
+        findViewById<TextView>(R.id.statusText).text = "Scanning folder for music..."
+        lifecycleScope.launch(Dispatchers.IO) {
+            val newSongList = scanFolderForAudio(folderUri)
+            saveCache(newSongList)
+
+            withContext(Dispatchers.Main) {
+                if (isPlaylistVisible) {
+                    togglePlaylistView()
+                }
+                PlayerState.currentSongIndex = -1
+                PlayerState.songList.clear()
+                PlayerState.songList.addAll(newSongList)
+                if (PlayerState.isShuffleEnabled) {
+                    PlayerState.shuffledIndices = PlayerState.songList.indices.shuffled().toMutableList()
+                } else {
+                    PlayerState.shuffledIndices.clear()
+                }
+                updateUI()
+                if (newSongList.isEmpty()) {
+                    findViewById<TextView>(R.id.statusText).text = "No audio files found in selected folder"
+                    Toast.makeText(
+                        this@MainActivity,
+                        "No playable audio files found in selected folder",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    findViewById<TextView>(R.id.statusText).text = "Loaded ${newSongList.size} files from folder"
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Loaded ${newSongList.size} songs from folder",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    // Register the launcher globally in your Activity/Fragment
+    private val folderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                try {
+                    val flags = (result.data?.flags ?: 0) and
+                            (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        if (flags != 0) flags else Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Could not take persistable permission: ${e.message}")
+                }
+
+                saveSelectedFolderUri(uri.toString())
+                loadMusicFromSelectedFolder(uri)
+            }
+        }
+    }
+
+    private fun checkStorageAndLoadMusic() {
+        val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
+        val savedFolderUri = prefs.getString("selected_folder_uri", null)
+
+        if (savedFolderUri != null) {
+            AlertDialog.Builder(this)
+                .setTitle("Music Folder")
+                .setItems(arrayOf("Rescan current folder", "Choose a new folder")) { _, which ->
+                    when (which) {
+                        0 -> loadMusicFromSelectedFolder(Uri.parse(savedFolderUri))
+                        1 -> pickNewFolder()
+                    }
+                }
+                .show()
+        } else {
+            pickNewFolder()
+        }
+    }
+
+    private fun pickNewFolder() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+            )
+        }
+        folderPickerLauncher.launch(intent)
     }
 
     private suspend fun loadSongsFromMediaStore(): List<Song> = withContext(Dispatchers.IO) {
@@ -266,6 +483,10 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, MusicService::class.java).setAction(action)
         if (index >= 0) {
             intent.putExtra(MusicService.EXTRA_INDEX, index)
+            if (index in PlayerState.songList.indices) {
+                intent.data = PlayerState.songList[index].uri
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -554,11 +775,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveCache(list: List<Song>) {
         val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
-        val sb = StringBuilder()
+        val arr = JSONArray()
         for (song in list) {
-            sb.append(song.name).append(":::").append(song.uri.toString()).append("|||")
+            val obj = JSONObject()
+            obj.put("name", song.name)
+            obj.put("uri", song.uri.toString())
+            arr.put(obj)
         }
-        prefs.edit().putString("cached_songs", sb.toString()).apply()
+        prefs.edit().putString("cached_songs", arr.toString()).apply()
     }
 
     private fun loadCache(): List<Song> {
@@ -567,14 +791,14 @@ class MainActivity : AppCompatActivity() {
         if (cached.isEmpty()) return emptyList()
 
         val list = mutableListOf<Song>()
-        val items = cached.split("|||")
-        for (item in items) {
-            if (item.contains(":::")) {
-                val parts = item.split(":::")
-                if (parts.size >= 2) {
-                    list.add(Song(parts[0], android.net.Uri.parse(parts[1])))
-                }
+        try {
+            val arr = JSONArray(cached)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(Song(obj.getString("name"), Uri.parse(obj.getString("uri"))))
             }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to parse song cache", e)
         }
         return list
     }
@@ -684,14 +908,35 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Startup: use the cached list. Do NOT rescan automatically.
         lifecycleScope.launch(Dispatchers.IO) {
+            val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
+            val hasCache = prefs.contains("cached_songs")
             val cached = loadCache()
+
             withContext(Dispatchers.Main) {
-                if (cached.isNotEmpty()) {
+                if (hasCache) {
                     PlayerState.songList.clear()
                     PlayerState.songList.addAll(cached)
                     updateUI()
-                    findViewById<TextView>(R.id.statusText).text = "Loaded ${PlayerState.songList.size} from cache"
+                    findViewById<TextView>(R.id.statusText).text =
+                        if (cached.isEmpty()) "No songs in cache — tap the folder icon to rescan"
+                        else "Loaded ${PlayerState.songList.size} from cache"
+                    return@withContext
+                }
+
+                // No cache at all — first run, so we must scan once.
+                val savedFolderUri = prefs.getString("selected_folder_uri", null)
+                if (savedFolderUri != null) {
+                    val uri = Uri.parse(savedFolderUri)
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Could not take persistable permission on startup: ${e.message}")
+                    }
+                    loadMusicFromSelectedFolder(uri)
                 } else {
                     refreshLibrary()
                 }
