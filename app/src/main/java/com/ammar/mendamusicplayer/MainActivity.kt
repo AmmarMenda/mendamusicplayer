@@ -8,6 +8,7 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Typeface
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Bundle
@@ -70,7 +71,11 @@ class MainActivity : AppCompatActivity() {
     private var albumArtJob: Job? = null
     private var isPlaylistVisible = false
     private var lastIconPause = false
-
+    private var showingAlbumArtTab = true
+    private lateinit var tabAlbumArt: TextView
+    private lateinit var tabUpNext: TextView
+    private lateinit var albumArtSection: View
+    private lateinit var upNextSection: View
     private var binder: MusicService.LocalBinder? = null
     private var isBound = false
 
@@ -434,6 +439,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun selectPlaylistTab(showAlbumArt: Boolean) {
+        showingAlbumArtTab = showAlbumArt
+
+        albumArtSection.visibility = if (showAlbumArt) View.VISIBLE else View.GONE
+        upNextSection.visibility = if (showAlbumArt) View.GONE else View.VISIBLE
+
+        val activeColor = ContextCompat.getColor(this, R.color.primary)
+        val inactiveColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        tabAlbumArt.setTextColor(if (showAlbumArt) activeColor else inactiveColor)
+        tabUpNext.setTextColor(if (showAlbumArt) inactiveColor else activeColor)
+
+        tabAlbumArt.setTypeface(null, if (showAlbumArt) Typeface.BOLD else Typeface.NORMAL)
+        tabUpNext.setTypeface(null, if (showAlbumArt) Typeface.NORMAL else Typeface.BOLD)
+
+        if (!showAlbumArt) updatePlaylistUI()
+    }
+
     private fun togglePlaylistView() {
         val viewAllMusic = findViewById<LinearLayout>(R.id.viewAllMusic)
         val viewPlaylist = findViewById<LinearLayout>(R.id.viewPlaylist)
@@ -445,7 +468,7 @@ class MainActivity : AppCompatActivity() {
             viewAllMusic.visibility = View.GONE
             viewPlaylist.visibility = View.VISIBLE
             btnToggle.animate().rotation(90f).setDuration(200).start()
-            updatePlaylistUI()
+            selectPlaylistTab(true)          // <-- new: default to Album Art
         } else {
             viewAllMusic.visibility = View.VISIBLE
             viewPlaylist.visibility = View.GONE
@@ -664,6 +687,13 @@ class MainActivity : AppCompatActivity() {
         val musicList = findViewById<ListView>(R.id.musicList)
         val playlistListView = findViewById<ListView>(R.id.playlistList)
 
+        tabAlbumArt = findViewById(R.id.tabAlbumArt)
+        tabUpNext = findViewById(R.id.tabUpNext)
+        albumArtSection = findViewById(R.id.albumArtSection)
+        upNextSection = findViewById(R.id.playlistList)
+
+        tabAlbumArt.setOnClickListener { selectPlaylistTab(true) }
+        tabUpNext.setOnClickListener { selectPlaylistTab(false) }
         musicAdapter = ArrayAdapter(this, R.layout.music_list_item, displayedSongList)
         musicList.adapter = musicAdapter
         musicList.setOnItemClickListener { _, _, position, _ ->
@@ -819,10 +849,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateAlbumArt(song: Song) {
         val imageKey = song.uri.toString()
-        val imgView = findViewById<ImageView>(R.id.imgAlbumArt)
+        val imgLarge = findViewById<ImageView>(R.id.imgAlbumArtLarge)
+        findViewById<TextView>(R.id.txtAlbumArtSongName)?.text = song.name
+
         val cachedBitmap = AlbumArtCache.getBitmapFromMemCache(imageKey)
         if (cachedBitmap != null) {
-            imgView.setImageBitmap(cachedBitmap)
+            imgLarge?.setImageBitmap(cachedBitmap)
             return
         }
 
@@ -851,10 +883,14 @@ class MainActivity : AppCompatActivity() {
                 AlbumArtCache.addBitmapToMemoryCache(imageKey, newBitmap)
             }
             withContext(Dispatchers.Main) {
+                val currentIdx = PlayerState.currentSongIndex
+                if (currentIdx < 0 || currentIdx >= PlayerState.songList.size) return@withContext
+                if (PlayerState.songList[currentIdx].uri.toString() != imageKey) return@withContext
+
                 if (newBitmap != null) {
-                    imgView.setImageBitmap(newBitmap)
+                    imgLarge?.setImageBitmap(newBitmap)
                 } else {
-                    imgView.setImageResource(R.drawable.ic_album_placeholder_vec)
+                    imgLarge?.setImageResource(R.drawable.ic_album_placeholder_vec)
                 }
             }
         }
@@ -908,7 +944,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Startup: use the cached list. Do NOT rescan automatically.
         lifecycleScope.launch(Dispatchers.IO) {
             val prefs = getSharedPreferences("MendaPrefs", Context.MODE_PRIVATE)
             val hasCache = prefs.contains("cached_songs")
@@ -925,7 +960,7 @@ class MainActivity : AppCompatActivity() {
                     return@withContext
                 }
 
-                // No cache at all — first run, so we must scan once.
+                // No cache yet — first run, so we must scan once.
                 val savedFolderUri = prefs.getString("selected_folder_uri", null)
                 if (savedFolderUri != null) {
                     val uri = Uri.parse(savedFolderUri)

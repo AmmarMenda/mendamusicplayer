@@ -2,215 +2,200 @@ package com.ammar.mendamusicplayer
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatSeekBar
-import kotlin.math.sin
 
+/**
+ * A SeekBar drawn as a static glass tube that fills with blood as the
+ * progress increases. No animations: every draw reflects the current
+ * [progress] / [max] values exactly.
+ */
 class BloodTubeSeekBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = androidx.appcompat.R.attr.seekBarStyle
+    defStyleAttr: Int = android.R.attr.seekBarStyle
 ) : AppCompatSeekBar(context, attrs, defStyleAttr) {
 
-    private val density = resources.displayMetrics.density
+    private var gradientsBuiltHeight = -1
+    private var gradientsBuiltWidth = -1
 
-    private val glassPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-        color = Color.argb(90, 255, 255, 255)
-    }
-    private val glossPath = Path()
-    private val glossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(28, 255, 255, 255)
-    }
-    private val bloodPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val edgeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 5f * density
-        color = Color.argb(60, 255, 82, 82)
-    }
-    private val edgeCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * density
-        color = Color.argb(230, 255, 138, 128)
-    }
-    private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(55, 255, 205, 210)
-    }
+    private val emptyPaint          = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bloodPaint          = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bloodSheenPaint     = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bloodShadowPaint    = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val meniscusPaint       = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glassTopPaint       = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glassBottomPaint    = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val outlinePaint        = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rimPaint            = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private val tubeRect = RectF()
-    private val fillRect = RectF()
-    private val clipPath = Path()
-
-    private var bloodShader: Shader? = null
-
-    private class Bubble(val xFrac: Float, val radiusPx: Float, val riseSpeed: Float, val swayPhase: Float) {
-        var yFrac = (xFrac * 7f) % 1f
-    }
-
-    private val bubbles = listOf(
-        Bubble(0.30f, 1.8f * density, 0.055f, 0.0f),
-        Bubble(0.62f, 1.2f * density, 0.040f, 2.1f),
-        Bubble(0.80f, 2.4f * density, 0.070f, 4.2f)
-    )
-
-    private var playing = false
-    private var wavePhase = 0f
-    private var waveAmplitude = 0f
-    private var lastFrameNanos = 0L
+    private val tubePath      = Path()
+    private val meniscusPath  = Path()
 
     init {
+        // Required for smooth gradients + clipPath quality
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
         thumb = null
         splitTrack = false
+        isFocusable = false
     }
 
-    fun setPlaying(value: Boolean) {
-        if (playing != value) {
-            playing = value
-            lastFrameNanos = 0L
-            invalidate()
-        }
-    }
+    /**
+     * Called from MainActivity.syncPlaybackUi(). Intentionally a no-op:
+     * the tube is static — no pulse, no wave, no tick animation.
+     */
+    fun setPlaying(playing: Boolean) { /* static appearance */ }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        val margin = 2.5f * density
-        tubeRect.set(margin, margin, w - margin, h - margin)
-        bloodShader = LinearGradient(
-            0f, tubeRect.top, 0f, tubeRect.bottom,
+        rebuildGradients(h.toFloat())
+    }
+
+    private fun rebuildGradients(h: Float) {
+        if (h <= 0f) return
+        if (h.toInt() == gradientsBuiltHeight && width == gradientsBuiltWidth) return
+        gradientsBuiltHeight = h.toInt()
+        gradientsBuiltWidth = width
+
+        // ---- Empty glass tube: pale bluish-white fading down ----
+        emptyPaint.shader = LinearGradient(
+            0f, 0f, 0f, h,
             intArrayOf(
-                Color.argb(255, 239, 83, 80),
-                Color.argb(255, 183, 28, 28),
-                Color.argb(255, 110, 4, 10)
+                0xFFF6FBFF.toInt(),
+                0xFFDAE7F2.toInt(),
+                0xFFB8CAD9.toInt(),
+                0xFF92A5B7.toInt(),
+                0xFF6E8093.toInt()
             ),
-            floatArrayOf(0f, 0.42f, 1f),
+            floatArrayOf(0f, 0.25f, 0.55f, 0.85f, 1f),
             Shader.TileMode.CLAMP
         )
-        bloodPaint.shader = bloodShader
+
+        // ---- Blood: deep crimson, brightest just above center ----
+        bloodPaint.shader = LinearGradient(
+            0f, 0f, 0f, h,
+            intArrayOf(
+                0xFF3A0202.toInt(),
+                0xFF680606.toInt(),
+                0xFFA50D0E.toInt(),
+                0xFFC61F20.toInt(),
+                0xFF9A1313.toInt(),
+                0xFF5C0707.toInt()
+            ),
+            floatArrayOf(0f, 0.15f, 0.38f, 0.55f, 0.8f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        // Wet highlight across the top of the blood
+        bloodSheenPaint.shader = LinearGradient(
+            0f, 0f, 0f, h * 0.42f,
+            intArrayOf(0x66FF8C8C.toInt(), 0x00FF8C8C),
+            floatArrayOf(0f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        // Sediment shadow at bottom of blood
+        bloodShadowPaint.shader = LinearGradient(
+            0f, h * 0.72f, 0f, h,
+            intArrayOf(0x00000000, 0x8C000000.toInt()),
+            floatArrayOf(0f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        // Glass top reflection band
+        glassTopPaint.shader = LinearGradient(
+            0f, 0f, 0f, h * 0.52f,
+            intArrayOf(0xAAFFFFFF.toInt(), 0x40FFFFFF, 0x00FFFFFF),
+            floatArrayOf(0f, 0.35f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        // Glass inner bottom shadow (tube thickness)
+        glassBottomPaint.shader = LinearGradient(
+            0f, h * 0.7f, 0f, h,
+            intArrayOf(0x00000000, 0x5C000000),
+            floatArrayOf(0f, 1f),
+            Shader.TileMode.CLAMP
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
-        stepAnimation()
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f || max <= 0) return
+        rebuildGradients(h)
 
-        val radius = tubeRect.height() / 2f
-        val innerSpan = tubeRect.width() - 2f * radius
+        val left   = paddingLeft.toFloat()
+        val right  = w - paddingRight.toFloat()
+        val top    = paddingTop.toFloat()
+        val bottom = h - paddingBottom.toFloat()
+        val tubeH  = bottom - top
+        if (right <= left || tubeH <= 0f) return
 
-        glassPaint.color = Color.argb(24, 255, 255, 255)
-        canvas.drawRoundRect(tubeRect, radius, radius, glassPaint)
+        val radius    = tubeH / 2f
+        val cy        = top + radius
+        val pct       = (progress.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+        val fillRight = left + (right - left) * pct
 
-        val fraction = if (max <= 0) 0f else (progress.toFloat() / max).coerceIn(0f, 1f)
-        val leadingX = tubeRect.left + radius + fraction * innerSpan
+        tubePath.reset()
+        tubePath.addRoundRect(left, top, right, bottom, radius, radius, Path.Direction.CW)
 
-        if (fraction > 0f) {
-            clipPath.reset()
-            clipPath.addRoundRect(tubeRect, radius, radius, Path.Direction.CW)
+        // 1. Empty glass tube
+        canvas.drawPath(tubePath, emptyPaint)
+
+        // 2. Blood fill
+        if (pct > 0.0005f) {
             canvas.save()
-            canvas.clipPath(clipPath)
-
-            fillRect.set(tubeRect.left, tubeRect.top, leadingX, tubeRect.bottom)
-            canvas.drawRoundRect(fillRect, radius, radius, bloodPaint)
-
-            val centerY = tubeRect.centerY()
-            val sway = sin(wavePhase) * waveAmplitude * radius * 0.22f
-            val bulgeTopY = tubeRect.top + sin(wavePhase * 0.9f + 1.3f) * waveAmplitude * radius * 0.35f
-            val bulgeBottomY = tubeRect.bottom - sin(wavePhase * 1.15f + 2.6f) * waveAmplitude * radius * 0.30f
-
-            edgeCorePaint.color = Color.argb(235, 255, 120, 110)
-            canvas.drawLine(
-                leadingX + sway,
-                bulgeTopY + radius * 0.25f,
-                leadingX + sway,
-                bulgeBottomY - radius * 0.25f,
-                edgeGlowPaint
-            )
-            canvas.drawLine(
-                leadingX + sway,
-                bulgeTopY + radius * 0.25f,
-                leadingX + sway,
-                bulgeBottomY - radius * 0.25f,
-                edgeCorePaint
-            )
-
-            val fillWidth = (leadingX - tubeRect.left).coerceAtLeast(1f)
-            val sheenCx = tubeRect.left + ((wavePhase * 40f) % (fillWidth + 200f * density)) - 100f * density
-            glossPaint.color = Color.argb(26, 255, 255, 255)
-            canvas.drawOval(
-                sheenCx - radius * 1.4f,
-                tubeRect.top + tubeRect.height() * 0.12f,
-                sheenCx + radius * 1.4f,
-                tubeRect.top + tubeRect.height() * 0.34f,
-                glossPaint
-            )
-
-            for (bubble in bubbles) {
-                val bx = tubeRect.left +
-                        bubble.xFrac * innerSpan +
-                        sin(wavePhase * 0.6f + bubble.swayPhase) * 3f * density
-                if (bx < leadingX - radius * 0.4f) {
-                    val by = tubeRect.bottom - bubble.yFrac * tubeRect.height() * 0.85f - radius * 0.1f
-                    canvas.drawCircle(bx, by, bubble.radiusPx, bubblePaint)
-                }
-            }
-
+            canvas.clipPath(tubePath)
+            canvas.drawRect(left, top, fillRight, bottom, bloodPaint)
+            canvas.drawRect(left, top, fillRight, top + tubeH * 0.42f, bloodSheenPaint)
+            canvas.drawRect(left, top + tubeH * 0.72f, fillRight, bottom, bloodShadowPaint)
             canvas.restore()
+
+            // Meniscus — curved blood/air interface
+            if (pct < 0.999f) {
+                meniscusPath.reset()
+                meniscusPath.moveTo(fillRight + 4f, top + 2f)
+                meniscusPath.quadTo(fillRight - 4f, cy, fillRight + 4f, bottom - 2f)
+                meniscusPaint.style = Paint.Style.STROKE
+                meniscusPaint.strokeWidth = 1.5f
+                meniscusPaint.strokeCap = Paint.Cap.ROUND
+                meniscusPaint.color = 0xFF2C0202.toInt()
+                canvas.save()
+                canvas.clipPath(tubePath)
+                canvas.drawPath(meniscusPath, meniscusPaint)
+                canvas.restore()
+            }
         }
 
-        glassPaint.color = Color.argb(20, 255, 255, 255)
-        glossPath.reset()
-        glossPath.moveTo(tubeRect.left + radius * 0.55f, tubeRect.top)
-        glossPath.lineTo(tubeRect.left + radius * 1.45f, tubeRect.top)
-        glossPath.lineTo(tubeRect.left + radius * 0.75f, tubeRect.bottom)
-        glossPath.lineTo(tubeRect.left + radius * 0.05f, tubeRect.bottom)
-        glossPath.close()
+        // 3. Glass top reflection
         canvas.save()
-        clipPath.reset()
-        clipPath.addRoundRect(tubeRect, radius, radius, Path.Direction.CW)
-        canvas.clipPath(clipPath)
-        canvas.drawPath(glossPath, glossPaint)
+        canvas.clipPath(tubePath)
+        canvas.drawRect(left, top, right, top + tubeH * 0.52f, glassTopPaint)
         canvas.restore()
 
-        canvas.drawRoundRect(tubeRect, radius, radius, rimPaint)
-        glossPaint.color = Color.argb(70, 255, 255, 255)
-        canvas.drawLine(
-            tubeRect.left + radius,
-            tubeRect.top + 1.2f * density,
-            tubeRect.right - radius,
-            tubeRect.top + 1.2f * density,
-            glossPaint
-        )
+        // 4. Glass inner bottom shadow
+        canvas.save()
+        canvas.clipPath(tubePath)
+        canvas.drawRect(left, top + tubeH * 0.7f, right, bottom, glassBottomPaint)
+        canvas.restore()
 
-        if (playing || waveAmplitude > 0.02f) {
-            postInvalidateOnAnimation()
-        } else {
-            lastFrameNanos = 0L
-        }
-    }
+        // 5. Tube outline (glass wall)
+        outlinePaint.style = Paint.Style.STROKE
+        outlinePaint.strokeWidth = 1.5f
+        outlinePaint.shader = null
+        outlinePaint.color = 0xAAFFFFFF.toInt()
+        canvas.drawPath(tubePath, outlinePaint)
 
-    private fun stepAnimation() {
-        val now = System.nanoTime()
-        if (lastFrameNanos != 0L) {
-            val dt = ((now - lastFrameNanos) / 1_000_000_000f).coerceIn(0f, 0.05f)
-            if (playing) {
-                wavePhase += dt * 5.2f
-                waveAmplitude += (1f - waveAmplitude) * dt * 6f
-                for (bubble in bubbles) {
-                    bubble.yFrac -= bubble.riseSpeed * dt * 10f
-                    if (bubble.yFrac < 0.08f) {
-                        bubble.yFrac = 0.95f
-                    }
-                }
-            } else {
-                waveAmplitude -= waveAmplitude * dt * 5f
-                if (waveAmplitude < 0.01f) waveAmplitude = 0f
-            }
-        }
-        lastFrameNanos = now
+        // 6. End rims
+        rimPaint.style = Paint.Style.STROKE
+        rimPaint.strokeWidth = 2f
+        rimPaint.color = 0x88000000.toInt()
+        canvas.drawCircle(left + radius, cy, radius - 1f, rimPaint)
+        canvas.drawCircle(right - radius, cy, radius - 1f, rimPaint)
     }
 }

@@ -11,4 +11,5 @@
     <color name="outlineVariant">#5a403c</color>
     <color name="divider">#353534</color>
     <color name="error">#ffb4ab</color>
+    <color name="text_secondary">#99FFFFFF</color>
 </resources>
